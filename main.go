@@ -2,11 +2,13 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 )
 
-// func unusedFunc() {} // ← 使用されていない公開関数（警告）
+// バージョン番号
+const version = "1.0"
 
 func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -14,11 +16,22 @@ func main() {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+
 		currentTime := time.Now().Format("2006-01-02 15:04:05")
-		message := fmt.Sprintf("APIテスト成功（ver1.0）：%s", currentTime)
-		w.Write([]byte(message))
+		message := fmt.Sprintf("APIテスト成功（ver%s）：%s", version, currentTime)
+
+		// Writeの返り値をチェック
+		if _, err := w.Write([]byte(message)); err != nil {
+			log.Printf("レスポンス書き込みエラー: %v", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
 	})
 
-	fmt.Println("Server started on port 80")
-	http.ListenAndServe(":80", nil)
+	fmt.Printf("サーバを起動しました（ポート: 80 var%s）", version)
+
+	// ListenAndServeの返り値をチェック
+	if err := http.ListenAndServe(":80", nil); err != nil {
+		log.Fatalf("サーバ起動エラー: %v", err)
+	}
 }

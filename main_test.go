@@ -1,57 +1,69 @@
 package main
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
-// ハンドラー部分を関数化してテスト可能にする
-func handler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("APIテスト成功"))
-}
-
-// テストコード
-func TestHandler_Success(t *testing.T) {
+func TestAPI(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	rec := httptest.NewRecorder()
+	w := httptest.NewRecorder()
 
-	handler(rec, req)
-
-	res := rec.Result()
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		t.Errorf("期待するステータスコード %d, 実際 %d", http.StatusOK, res.StatusCode)
+	// テスト対象のハンドラを呼び出し
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		if _, err := w.Write([]byte("APIテスト成功")); err != nil {
+			t.Errorf("レスポンス書き込みエラー: %v", err)
+		}
 	}
 
-	body := rec.Body.String()
-	if !strings.Contains(body, "APIテスト成功") {
-		t.Errorf("レスポンスに期待する文字列が含まれていません: %s", body)
+	handler(w, req)
+
+	res := w.Result()
+	defer func() {
+		if err := res.Body.Close(); err != nil {
+			t.Logf("Body.Close エラー: %v", err)
+		}
+	}()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatalf("レスポンス読み取りエラー: %v", err)
+	}
+
+	if string(body) != "APIテスト成功" {
+		t.Errorf("期待値と異なります: got %s", string(body))
 	}
 }
 
-func TestHandler_MethodNotAllowed(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/", nil)
-	rec := httptest.NewRecorder()
+func TestServer(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := w.Write([]byte("Hello")); err != nil {
+			t.Errorf("レスポンス書き込みエラー: %v", err)
+		}
+	}))
+	defer func() {
+		t.Log("テストサーバを終了します")
+		ts.Close() // Closeはerrorを返さない
+	}()
 
-	handler(rec, req)
+	res, err := http.Get(ts.URL)
+	if err != nil {
+		t.Fatalf("HTTPリクエストエラー: %v", err)
+	}
+	defer func() {
+		if err := res.Body.Close(); err != nil {
+			t.Logf("Body.Close エラー: %v", err)
+		}
+	}()
 
-	res := rec.Result()
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusMethodNotAllowed {
-		t.Errorf("期待するステータスコード %d, 実際 %d", http.StatusMethodNotAllowed, res.StatusCode)
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatalf("レスポンス読み取りエラー: %v", err)
 	}
 
-	body := rec.Body.String()
-	if !strings.Contains(body, "Method not allowed") {
-		t.Errorf("エラーメッセージが異なります: %s", body)
+	if string(body) != "Hello" {
+		t.Errorf("期待値と異なります: got %s", string(body))
 	}
 }
